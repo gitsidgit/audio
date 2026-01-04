@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dual Channel Audio Player</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7.11.1"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7.11.1/dist/plugins/minimap.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7.11.1/dist/plugins/timeline.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7.11.1/dist/plugins/regions.min.js"></script>
+    <style>
+        body { margin: 10px; font: 13px Arial; background: #f5f5f5; }
+        #player { 
+            background: white; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            border-radius: 3px; 
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        #filename { 
+            font-weight: bold; 
+            color: #333; 
+            font-size: 14px;
+        }
+        .time { 
+            font: 12px monospace; 
+            color: #007acc; 
+            background: #f8f8f8;
+            padding: 3px 8px;
+            border-radius: 3px;
+        }
+        
+        /* Dual waveform container */
+        .waveforms-container {
+            margin: 8px 0 4px 0;
+        }
+        
+        .waveform-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 3px;
+            padding: 4px;
+            background: #fafafa;
+            border-radius: 3px;
+            border: 1px solid #eee;
+        }
+        
+        .waveform-row.active {
+            background: #f0f8ff;
+            border-color: #007acc;
+        }
+        
+        .channel-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            width: 75px;
+            padding-right: 8px;
+            border-right: 1px solid #eee;
+        }
+        
+        .channel-btn {
+            width: 55px;
+            padding: 3px;
+            font-size: 11px;
+            border: 1px solid #bbb;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+            text-align: center;
+        }
+        
+        .channel-btn.select {
+            background: #f0f0f0;
+        }
+        
+        .channel-btn.select.active {
+            background: #007acc;
+            color: white;
+            border-color: #005a9c;
+        }
+        
+        .channel-btn.mute {
+            background: #fff0f0;
+        }
+        
+        .channel-btn.mute.muted {
+            background: #ffcccc;
+            color: #cc0000;
+        }
+        
+        .waveform-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 90px;
+            background: white;
+            border-radius: 3px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        
+        .channel-waveform {
+            height: 65px;
+        }
+        
+        .channel-label {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            padding: 1px 5px;
+            border-radius: 2px;
+            z-index: 10;
+        }
+        
+        .ch1-label { background: #007acc; }
+        .ch2-label { background: #cc3300; }
+        
+        /* Stacked minimaps */
+        .minimaps-container {
+            margin: 4px 0 8px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        
+        .minimap-row {
+            display: flex;
+            align-items: center;
+            padding: 2px;
+            background: #f8f8f8;
+            border-radius: 3px;
+            border: 1px solid #eee;
+        }
+        
+        .minimap-label {
+            width: 75px;
+            font-size: 10px;
+            font-weight: bold;
+            text-align: center;
+            padding-right: 8px;
+            border-right: 1px solid #eee;
+        }
+        
+        .minimap-wrapper {
+            flex: 1;
+            height: 35px;
+            background: white;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        /* Load container with status */
+        .load-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 8px 0;
+            padding: 6px;
+            background: #f8f8f8;
+            border-radius: 3px;
+        }
+        
+        #load-btn {
+            padding: 5px 12px;
+            background: #28a745;
+            color: white;
+            border: 1px solid #218838;
+            border-radius: 3px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        #load-btn:hover {
+            background: #218838;
+        }
+        
+        .selected-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .selected-channel {
+            font-weight: bold;
+            color: #007acc;
+            background: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+            font-size: 12px;
+        }
+        
+        #status {
+            font-size: 11px;
+            color: #666;
+            background: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+            min-width: 80px;
+        }
+        
+        /* Main controls */
+        .main-controls { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 6px; 
+            margin: 8px 0;
+            padding: 6px;
+            background: #f8f8f8;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+        
+        .control-group { 
+            display: flex; 
+            align-items: center; 
+            gap: 4px; 
+            padding: 2px 5px; 
+            background: white; 
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+        
+        button, select, input[type="file"], input[type="number"] { 
+            padding: 3px 6px; 
+            font: 12px Arial; 
+            border: 1px solid #bbb; 
+            border-radius: 3px; 
+        }
+        
+        .play-btn { 
+            background: #007acc; 
+            color: white; 
+            font-weight: bold;
+            min-width: 50px;
+            padding: 4px 8px;
+        }
+        
+        .play-btn:hover { background: #005a9c; }
+        
+        .stop-btn {
+            background: #dc3545;
+            color: white;
+            font-weight: bold;
+            min-width: 50px;
+            padding: 4px 8px;
+        }
+        
+        .stop-btn:hover {
+            background: #c82333;
+        }
+        
+        .skip-btn { 
+            background: #f0f0f0; 
+            min-width: 40px;
+            padding: 4px 6px;
+        }
+        
+        .skip-btn:hover { background: #e0e0e0; }
+        
+        .skip-input {
+            width: 40px;
+            text-align: center;
+            padding: 3px;
+            font-size: 11px;
+        }
+        
+        input[type="range"] { width: 65px; }
+        
+        .info { 
+            font: 10px/1.3 Arial; 
+            padding: 4px; 
+            background: #eef; 
+            margin: 6px 0; 
+            border-radius: 3px;
+            border-left: 3px solid #007acc;
+        }
+        
+        .muted { color: #c00; }
+        
+        label { 
+            font-weight: bold; 
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        
+        #file-input {
+            display: none;
+        }
+        
+        .global-mute {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* Region styles */
+        .ws-region {
+            border: 2px solid rgba(0, 122, 204, 0.5);
+            cursor: move;
+        }
+        
+        .ws-region.active {
+            border: 2px solid #ff5722;
+            z-index: 10;
+        }
+        
+        .skip-controls {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        
+        /* Timeline styles - from demo */
+        .timeline-top {
+            font-size: 10px;
+            color: #2D5B88;
+            height: 15px;
+        }
+        
+        .timeline-bottom {
+            font-size: 9px;
+            color: #6A3274;
+            height: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="player">
+        <!-- Header -->
+        <div class="header">
+            <div id="filename">Dual Channel Audio Player</div>
+            <div class="time">
+                <span id="current">0:00.00</span> / 
+                <span id="total">0:00.00</span>
+            </div>
+        </div>
+        
+        <!-- Dual waveforms with timelines -->
+        <div class="waveforms-container">
+            <!-- Channel A -->
+            <div class="waveform-row" id="waveform-row-1">
+                <div class="channel-controls">
+                    <button class="channel-btn select active" data-channel="1">A</button>
+                    <button class="channel-btn mute" data-channel="1">Mute</button>
+                </div>
+                <div class="waveform-wrapper" id="waveform-wrapper-1">
+                    <!-- <div class="channel-label ch1-label">A</div> -->
+                    <div id="waveform-ch1" class="channel-waveform"></div>
+                </div>
+            </div>
+            
+            <!-- Channel B -->
+            <div class="waveform-row" id="waveform-row-2">
+                <div class="channel-controls">
+                    <button class="channel-btn select" data-channel="2">B</button>
+                    <button class="channel-btn mute" data-channel="2">Mute</button>
+                </div>
+                <div class="waveform-wrapper" id="waveform-wrapper-2">
+                    <!-- <div class="channel-label ch2-label">B</div> -->
+                    <div id="waveform-ch2" class="channel-waveform"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stacked minimaps -->
+        <div class="minimaps-container">
+            <div class="minimap-row">
+                <div class="minimap-label"></div>
+                <div class="minimap-wrapper" id="minimap-wrapper-1">
+                    <div id="minimap-ch1"></div>
+                </div>
+            </div>
+            <div class="minimap-row">
+                <div class="minimap-label"></div>
+                <div class="minimap-wrapper" id="minimap-wrapper-2">
+                    <div id="minimap-ch2"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="info">Drag on any waveform or minimap to create loop region • Click region to play • Click anywhere else to cancel loop</div>
+        
+        <!-- Load container with status -->
+        <div class="load-container">
+            <button id="load-btn">Load Audio</button>
+            <div class="selected-info">
+                <span>Selected: <span class="selected-channel" id="selected-channel">A</span></span>
+                <span id="status">Ready</span>
+            </div>
+        </div>
+        
+        <!-- Main controls -->
+        <div class="main-controls">
+            <!-- Playback controls with skip seconds -->
+            <div class="control-group">
+                <div class="skip-controls">
+                    <input type="number" id="skip-seconds" class="skip-input" min="0.1" max="60" step="0.1" value="5.0" title="Skip seconds">
+                    <button id="back" class="skip-btn" title="Skip back">⏮</button>
+                    <button id="stop" class="stop-btn" title="Stop">⏹</button>
+                    <button id="play" class="play-btn">▶ Play</button>
+                    <button id="forward" class="skip-btn" title="Skip forward">⏭</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <span id="vol-icon" style="font-size:12px;">🔊</span>
+                <input type="range" id="vol" min="0" max="1" value="0.8" step="0.05">
+                <span id="vol-text" style="font-size:11px;">80%</span>
+                <div class="global-mute">
+                    <input type="checkbox" id="mute">
+                    <label for="mute">Mute All</label>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label>Zoom:</label>
+                <input type="range" id="zoom" min="10" max="500" value="100" step="10">
+                <span id="zoom-text" style="font-size:11px;">100</span>
+                <button id="reset-zoom" title="Reset">↺</button>
+            </div>
+            
+            <div class="control-group">
+                <label>Speed:</label>
+                <select id="speed">
+                    <option value="0.5">0.5x</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1.0" selected>1.0x</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2.0">2.0x</option>
+                </select>
+                <button id="reset-speed" title="Reset">↺</button>
+            </div>
+        </div>
+        
+        <!-- Hidden file input -->
+        <input type="file" id="file-input" accept="audio/*">
+    </div>
+
+    <script>
+        $(function() {
+            // Configuration
+            const config = {
+                dualChannel: true,
+                defaultAudioUrl: 'https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.wav',
+                defaultSkipSeconds: 5.0
+            };
+            
+            // State variables
+            let selectedChannel = 1;
+            let blobUrls = { 1: null, 2: null };
+            let fileNames = { 1: 'sample.wav', 2: 'No audio loaded' };
+            let channelMuted = { 1: false, 2: false };
+            let zoom = 100;
+            let vol = 0.8;
+            let globalMuted = false;
+            let preMuteVol = vol;
+            let activeRegions = { 1: null, 2: null };
+            let playing = false;
+            let duration = 0;
+            let skipSeconds = config.defaultSkipSeconds;
+            
+            // Create timelines for both channels
+            const timelineTop1 = WaveSurfer.Timeline.create({
+                height: 12,
+                insertPosition: 'beforebegin',
+                timeInterval: 0.2,
+                primaryLabelInterval: 5,
+                secondaryLabelInterval: 1,
+                style: {
+                    fontSize: '10px',
+                    color: '#2D5B88',
+                },
+            });
+            
+            const timelineBottom1 = WaveSurfer.Timeline.create({
+                height: 8,
+                timeInterval: 0.1,
+                primaryLabelInterval: 1,
+                style: {
+                    fontSize: '9px',
+                    color: '#6A3274',
+                },
+            });
+            
+            const timelineTop2 = WaveSurfer.Timeline.create({
+                height: 12,
+                insertPosition: 'beforebegin',
+                timeInterval: 0.2,
+                primaryLabelInterval: 5,
+                secondaryLabelInterval: 1,
+                style: {
+                    fontSize: '10px',
+                    color: '#2D5B88',
+                },
+            });
+            
+            const timelineBottom2 = WaveSurfer.Timeline.create({
+                height: 8,
+                timeInterval: 0.1,
+                primaryLabelInterval: 1,
+                style: {
+                    fontSize: '9px',
+                    color: '#6A3274',
+                },
+            });
+            
+            // Create wavesurfer instances for both main waveforms WITH TIMELINES
+            const ws1 = WaveSurfer.create({
+                container: '#waveform-ch1',
+                waveColor: '#007acc',
+                progressColor: '#005a9c',
+                height: 65,
+                minPxPerSec: zoom,
+                volume: vol,
+                normalize: true,
+                interact: true,
+                cursorWidth: 1,
+                plugins: [
+                    timelineTop1,
+                    //timelineBottom1
+                ]
+            });
+            
+            const ws2 = WaveSurfer.create({
+                container: '#waveform-ch2',
+                waveColor: '#cc3300',
+                progressColor: '#992200',
+                height: 65,
+                minPxPerSec: zoom,
+                volume: vol,
+                normalize: true,
+                interact: true,
+                cursorWidth: 1,
+                plugins: [
+                    timelineTop2,
+                    //timelineBottom2
+                ]
+            });
+            
+            // Create minimap instances
+            const minimap1 = WaveSurfer.create({
+                container: '#minimap-ch1',
+                waveColor: '#aaa',
+                progressColor: '#007acc',
+                height: 35,
+                minPxPerSec: zoom,
+                volume: vol,
+                cursorWidth: 1
+            });
+            
+            const minimap2 = WaveSurfer.create({
+                container: '#minimap-ch2',
+                waveColor: '#aaa',
+                progressColor: '#cc3300',
+                height: 35,
+                minPxPerSec: zoom,
+                volume: vol,
+                cursorWidth: 1
+            });
+            
+            // Create regions plugins
+            const regions1 = WaveSurfer.Regions.create();
+            const regions2 = WaveSurfer.Regions.create();
+            const minimapRegions1 = WaveSurfer.Regions.create();
+            const minimapRegions2 = WaveSurfer.Regions.create();
+            
+            // Register regions plugins
+            ws1.registerPlugin(regions1);
+            ws2.registerPlugin(regions2);
+            minimap1.registerPlugin(minimapRegions1);
+            minimap2.registerPlugin(minimapRegions2);
+            
+            // Enable drag selection on ALL containers
+            regions1.enableDragSelection({ color: 'rgba(0,122,204,0.3)' });
+            regions2.enableDragSelection({ color: 'rgba(204,51,0,0.3)' });
+            minimapRegions1.enableDragSelection({ color: 'rgba(0,122,204,0.3)' });
+            minimapRegions2.enableDragSelection({ color: 'rgba(204,51,0,0.3)' });
+            
+            // Load default audio to channel A (1)
+            loadAudioToChannel(config.defaultAudioUrl, 1);
+            
+            // Initialize skip seconds input
+            $('#skip-seconds').val(skipSeconds.toFixed(1));
+            
+            // Synchronize playback between all instances
+            let isSyncing = false;
+            
+            function syncPlayback(triggerWs, targetWs) {
+                if (isSyncing) return;
+                isSyncing = true;
+                
+                const time = triggerWs.getCurrentTime();
+                const isPlaying = triggerWs.isPlaying();
+                
+                targetWs.setTime(time);
+                if (isPlaying) {
+                    targetWs.play();
+                } else {
+                    targetWs.pause();
+                }
+                
+                setTimeout(() => { isSyncing = false; }, 10);
+            }
+            
+            // Sync events - all 4 instances
+            ws1.on('timeupdate', () => {
+                if (!isSyncing) {
+                    syncPlayback(ws1, ws2);
+                    syncPlayback(ws1, minimap1);
+                    syncPlayback(ws1, minimap2);
+                    updateTime();
+                }
+            });
+            
+            ws2.on('timeupdate', () => {
+                if (!isSyncing) {
+                    syncPlayback(ws2, ws1);
+                    syncPlayback(ws2, minimap1);
+                    syncPlayback(ws2, minimap2);
+                    updateTime();
+                }
+            });
+            
+            minimap1.on('timeupdate', () => {
+                if (!isSyncing) {
+                    syncPlayback(minimap1, ws1);
+                    syncPlayback(minimap1, ws2);
+                    syncPlayback(minimap1, minimap2);
+                    updateTime();
+                }
+            });
+            
+            minimap2.on('timeupdate', () => {
+                if (!isSyncing) {
+                    syncPlayback(minimap2, ws1);
+                    syncPlayback(minimap2, ws2);
+                    syncPlayback(minimap2, minimap1);
+                    updateTime();
+                }
+            });
+            
+            // Play/pause events
+            ws1.on('play', () => {
+                playing = true;
+                $('#play').text('⏸ Pause');
+                $('#status').text('Playing');
+            });
+            
+            ws1.on('pause', () => {
+                playing = false;
+                $('#play').text('▶ Play');
+                $('#status').text('Paused');
+            });
+            
+            ws1.on('finish', () => {
+                playing = false;
+                $('#play').text('▶ Play');
+                $('#status').text('Stopped');
+                
+                // Check if we should loop for active regions
+                checkAndLoopRegions();
+            });
+            
+            ws2.on('finish', () => {
+                checkAndLoopRegions();
+            });
+            
+            // Ready events
+            ws1.on('ready', function() {
+                duration = ws1.getDuration();
+                updateTime();
+                $('#status').text('Ready');
+            });
+            
+            ws2.on('ready', function() {
+                const newDuration = ws2.getDuration();
+                if (newDuration > duration) {
+                    duration = newDuration;
+                }
+                updateTime();
+            });
+            
+            minimap1.on('ready', function() {
+                updateTime();
+            });
+            
+            minimap2.on('ready', function() {
+                updateTime();
+            });
+            
+            // Function to check and loop regions
+            function checkAndLoopRegions() {
+                // Check channel A region
+                if (activeRegions[1]) {
+                    const currentTime = ws1.getCurrentTime();
+                    const region = activeRegions[1];
+                    
+                    // If we're at or past the region end, loop back to start
+                    if (currentTime >= region.end) {
+                        ws1.setTime(region.start);
+                        ws2.setTime(region.start);
+                        minimap1.setTime(region.start);
+                        minimap2.setTime(region.start);
+                        
+                        // Continue playing if we were playing
+                        if (playing) {
+                            ws1.play();
+                            ws2.play();
+                            minimap1.play();
+                            minimap2.play();
+                        }
+                    }
+                }
+                
+                // Check channel B region
+                if (activeRegions[2]) {
+                    const currentTime = ws2.getCurrentTime();
+                    const region = activeRegions[2];
+                    
+                    // If we're at or past the region end, loop back to start
+                    if (currentTime >= region.end) {
+                        ws1.setTime(region.start);
+                        ws2.setTime(region.start);
+                        minimap1.setTime(region.start);
+                        minimap2.setTime(region.start);
+                        
+                        // Continue playing if we were playing
+                        if (playing) {
+                            ws1.play();
+                            ws2.play();
+                            minimap1.play();
+                            minimap2.play();
+                        }
+                    }
+                }
+            }
+            
+            // Function to handle region creation for any container
+            function handleRegionCreation(region, channel) {
+                // Set region properties
+                region.setOptions({
+                    color: channel === 1 ? 'rgba(0,122,204,0.3)' : 'rgba(204,51,0,0.3)',
+                    drag: true,
+                    resize: true
+                });
+                
+                // Remove any existing region for this channel
+                if (activeRegions[channel]) {
+                    removeRegionFromAllContainers(channel);
+                }
+                
+                activeRegions[channel] = region;
+                updateInfo();
+            }
+            
+            // Region creation for channel A
+            regions1.on('region-created', function(region) {
+                handleRegionCreation(region, 1);
+            });
+            
+            // Region creation for channel B
+            regions2.on('region-created', function(region) {
+                handleRegionCreation(region, 2);
+            });
+            
+            // Region creation for channel A minimap
+            minimapRegions1.on('region-created', function(region) {
+                handleRegionCreation(region, 1);
+            });
+            
+            // Region creation for channel B minimap
+            minimapRegions2.on('region-created', function(region) {
+                handleRegionCreation(region, 2);
+            });
+            
+            // Region clicked events - play from region start
+            regions1.on('region-clicked', function(region, e) {
+                e.stopPropagation();
+                activeRegions[1] = region;
+                playFromRegion(region);
+            });
+            
+            regions2.on('region-clicked', function(region, e) {
+                e.stopPropagation();
+                activeRegions[2] = region;
+                playFromRegion(region);
+            });
+            
+            minimapRegions1.on('region-clicked', function(region, e) {
+                e.stopPropagation();
+                activeRegions[1] = region;
+                playFromRegion(region);
+            });
+            
+            minimapRegions2.on('region-clicked', function(region, e) {
+                e.stopPropagation();
+                activeRegions[2] = region;
+                playFromRegion(region);
+            });
+            
+            // Function to play from region start
+            function playFromRegion(region) {
+                // Set time to region start
+                ws1.setTime(region.start);
+                ws2.setTime(region.start);
+                minimap1.setTime(region.start);
+                minimap2.setTime(region.start);
+                
+                // Start playing
+                ws1.play();
+                ws2.play();
+                minimap1.play();
+                minimap2.play();
+            }
+            
+            // Click anywhere to remove active region for that channel
+            $('#waveform-wrapper-1').on('click', function(e) {
+                if (activeRegions[1] && !$(e.target).closest('.ws-region').length) {
+                    removeRegionFromAllContainers(1);
+                }
+            });
+            
+            $('#waveform-wrapper-2').on('click', function(e) {
+                if (activeRegions[2] && !$(e.target).closest('.ws-region').length) {
+                    removeRegionFromAllContainers(2);
+                }
+            });
+            
+            $('#minimap-wrapper-1').on('click', function(e) {
+                if (activeRegions[1] && !$(e.target).closest('.ws-region').length) {
+                    removeRegionFromAllContainers(1);
+                }
+            });
+            
+            $('#minimap-wrapper-2').on('click', function(e) {
+                if (activeRegions[2] && !$(e.target).closest('.ws-region').length) {
+                    removeRegionFromAllContainers(2);
+                }
+            });
+            
+            function removeRegionFromAllContainers(channel) {
+                if (activeRegions[channel]) {
+                    // Get all regions from all containers
+                    const allRegions = [
+                        ...regions1.getRegions(),
+                        ...regions2.getRegions(),
+                        ...minimapRegions1.getRegions(),
+                        ...minimapRegions2.getRegions()
+                    ];
+                    
+                    // Remove the active region
+                    allRegions.forEach(r => {
+                        if (r === activeRegions[channel]) {
+                            r.remove();
+                        }
+                    });
+                    
+                    activeRegions[channel] = null;
+                    updateInfo();
+                }
+            }
+            
+            // Channel select buttons
+            $('.channel-btn.select').click(function() {
+                const channel = $(this).data('channel');
+                selectChannel(channel);
+            });
+            
+            // Channel mute buttons
+            $('.channel-btn.mute').click(function() {
+                const channel = $(this).data('channel');
+                toggleChannelMute(channel);
+            });
+            
+            // Load button
+            $('#load-btn').click(function() {
+                $('#file-input').click();
+            });
+            
+            // File input handler
+            $('#file-input').change(function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // Clean up old blob URL
+                if (blobUrls[selectedChannel]) {
+                    URL.revokeObjectURL(blobUrls[selectedChannel]);
+                }
+                
+                // Create new blob URL
+                const blobUrl = URL.createObjectURL(file);
+                blobUrls[selectedChannel] = blobUrl;
+                fileNames[selectedChannel] = file.name;
+                
+                // Load audio to selected channel
+                loadAudioToChannel(blobUrl, selectedChannel);
+                
+                $(this).val('');
+            });
+            
+            // Skip seconds input handler
+            $('#skip-seconds').on('change', function() {
+                let value = parseFloat($(this).val());
+                if (isNaN(value) || value < 0.1) value = 0.1;
+                if (value > 60) value = 60;
+                skipSeconds = value;
+                $(this).val(value.toFixed(1));
+                $('#status').text(`Skip: ${value.toFixed(1)}s`);
+            });
+            
+            // Play button
+            $('#play').click(function() { 
+                if (playing) {
+                    ws1.pause();
+                    ws2.pause();
+                    minimap1.pause();
+                    minimap2.pause();
+                } else {
+                    // Play both channels by default
+                    ws1.play();
+                    ws2.play();
+                    minimap1.play();
+                    minimap2.play();
+                }
+            });
+            
+            // Stop button
+            $('#stop').click(function() {
+                ws1.stop();
+                ws2.stop();
+                minimap1.stop();
+                minimap2.stop();
+                playing = false;
+                $('#play').text('▶ Play');
+                $('#status').text('Stopped');
+            });
+            
+            // Forward button
+            $('#forward').click(function() { 
+                skip(skipSeconds); 
+            });
+            
+            // Back button
+            $('#back').click(function() { 
+                skip(-skipSeconds); 
+            });
+            
+            $('#vol').on('input', function() {
+                const v = parseFloat($(this).val());
+                setVolume(v);
+            });
+            
+            $('#mute').change(function() {
+                globalMuted = $(this).is(':checked');
+                toggleGlobalMute();
+                updateVolumeIcon();
+            });
+            
+            $('#zoom').on('input', function() {
+                zoom = parseInt($(this).val());
+                ws1.setOptions({ minPxPerSec: zoom });
+                ws2.setOptions({ minPxPerSec: zoom });
+                minimap1.setOptions({ minPxPerSec: zoom });
+                minimap2.setOptions({ minPxPerSec: zoom });
+                $('#zoom-text').text(zoom);
+            });
+            
+            $('#reset-zoom').click(function() {
+                zoom = 100;
+                ws1.setOptions({ minPxPerSec: zoom });
+                ws2.setOptions({ minPxPerSec: zoom });
+                minimap1.setOptions({ minPxPerSec: zoom });
+                minimap2.setOptions({ minPxPerSec: zoom });
+                $('#zoom').val(100);
+                $('#zoom-text').text('100');
+            });
+            
+            $('#speed').change(function() {
+                const speed = parseFloat($(this).val());
+                ws1.setPlaybackRate(speed);
+                ws2.setPlaybackRate(speed);
+                minimap1.setPlaybackRate(speed);
+                minimap2.setPlaybackRate(speed);
+            });
+            
+            $('#reset-speed').click(function() {
+                ws1.setPlaybackRate(1.0);
+                ws2.setPlaybackRate(1.0);
+                minimap1.setPlaybackRate(1.0);
+                minimap2.setPlaybackRate(1.0);
+                $('#speed').val('1.0');
+            });
+            
+            // Keyboard shortcuts
+            $(document).keydown(function(e) {
+                if (e.key === ' ' && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    if (playing) {
+                        ws1.pause();
+                        ws2.pause();
+                        minimap1.pause();
+                        minimap2.pause();
+                    } else {
+                        ws1.play();
+                        ws2.play();
+                        minimap1.play();
+                        minimap2.play();
+                    }
+                }
+                if (e.key === 'ArrowRight' && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    skip(skipSeconds);
+                }
+                if (e.key === 'ArrowLeft' && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    skip(-skipSeconds);
+                }
+                if (e.key === 's' && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    $('#stop').click();
+                }
+                if (e.key === 'm' && e.ctrlKey && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    globalMuted = !globalMuted;
+                    $('#mute').prop('checked', globalMuted);
+                    toggleGlobalMute();
+                    updateVolumeIcon();
+                }
+                if (e.key === '1' && !$(e.target).is('input, textarea, select')) {
+                    selectChannel(1);
+                }
+                if (e.key === '2' && !$(e.target).is('input, textarea, select')) {
+                    selectChannel(2);
+                }
+                if (e.key === 'Escape') {
+                    // Remove all regions
+                    removeRegionFromAllContainers(1);
+                    removeRegionFromAllContainers(2);
+                }
+            });
+            
+            // Helper functions
+            function updateTime() {
+                const format = function(s) {
+                    const m = Math.floor(s / 60);
+                    const sec = (s % 60).toFixed(2);
+                    return `${m}:${sec.padStart(5, '0')}`;
+                };
+                const currentTime = ws1.getCurrentTime();
+                $('#current').text(format(currentTime));
+                $('#total').text(format(duration));
+                
+                // Check if we need to loop
+                checkAndLoopRegions();
+                
+                // Update filename with current time
+                const activeFile = fileNames[selectedChannel];
+                if (activeFile && activeFile !== 'No audio loaded') {
+                    $('#filename').text(`${activeFile} (${format(currentTime)})`);
+                }
+            }
+            
+            function updateInfo() {
+                const info = $('.info');
+                let loopInfo = [];
+                
+                if (activeRegions[1]) {
+                    const s = activeRegions[1].start.toFixed(2);
+                    const e = activeRegions[1].end.toFixed(2);
+                    loopInfo.push(`A: ${s}s-${e}s`);
+                }
+                
+                if (activeRegions[2]) {
+                    const s = activeRegions[2].start.toFixed(2);
+                    const e = activeRegions[2].end.toFixed(2);
+                    loopInfo.push(`B: ${s}s-${e}s`);
+                }
+                
+                if (loopInfo.length > 0) {
+                    info.html(`Looping: ${loopInfo.join(' • ')} • Click anywhere to cancel`);
+                } else {
+                    info.html('Drag on any waveform or minimap to create loop region • Click region to play');
+                }
+            }
+            
+            function setVolume(v) {
+                vol = v;
+                ws1.setVolume(v);
+                ws2.setVolume(v);
+                minimap1.setVolume(v);
+                minimap2.setVolume(v);
+                $('#vol-text').text(Math.round(v * 100) + '%');
+                
+                if (globalMuted && v > 0) {
+                    globalMuted = false;
+                    $('#mute').prop('checked', false);
+                    updateVolumeIcon();
+                }
+            }
+            
+            function toggleGlobalMute() {
+                if (globalMuted) {
+                    preMuteVol = vol;
+                    setVolume(0);
+                    $('#vol-text').text('0%');
+                    $('#vol').val(0);
+                } else {
+                    setVolume(preMuteVol);
+                    $('#vol-text').text(Math.round(preMuteVol * 100) + '%');
+                    $('#vol').val(preMuteVol);
+                }
+                updateVolumeIcon();
+            }
+            
+            function updateVolumeIcon() {
+                const icon = $('#vol-icon');
+                if (globalMuted) {
+                    icon.text('🔇').addClass('muted');
+                } else {
+                    icon.text('🔊').removeClass('muted');
+                }
+            }
+            
+            function skip(sec) {
+                const currentTime = ws1.getCurrentTime();
+                const newTime = currentTime + sec;
+                const clampedTime = Math.max(0, Math.min(newTime, duration));
+                
+                ws1.setTime(clampedTime);
+                ws2.setTime(clampedTime);
+                minimap1.setTime(clampedTime);
+                minimap2.setTime(clampedTime);
+            }
+            
+            function selectChannel(channel) {
+                selectedChannel = channel;
+                
+                // Update UI
+                $('.channel-btn.select').removeClass('active');
+                $(`.channel-btn.select[data-channel="${channel}"]`).addClass('active');
+                
+                $('.waveform-row').removeClass('active');
+                $(`#waveform-row-${channel}`).addClass('active');
+                
+                // Update selected channel display
+                const channelLetter = channel === 1 ? 'A' : 'B';
+                $('#selected-channel').text(channelLetter);
+                
+                // Update filename display
+                const fileName = fileNames[channel];
+                if (fileName && fileName !== 'No audio loaded') {
+                    $('#filename').text(`${fileName} (${channelLetter})`);
+                }
+            }
+            
+            function toggleChannelMute(channel) {
+                channelMuted[channel] = !channelMuted[channel];
+                
+                // Update button appearance
+                $(`.channel-btn.mute[data-channel="${channel}"]`).toggleClass('muted', channelMuted[channel]);
+                
+                // Actually mute/unmute the specific channel
+                if (channel === 1) {
+                    if (channelMuted[1]) {
+                        ws1.setVolume(0);
+                        minimap1.setVolume(0);
+                    } else {
+                        ws1.setVolume(vol);
+                        minimap1.setVolume(vol);
+                    }
+                } else if (channel === 2) {
+                    if (channelMuted[2]) {
+                        ws2.setVolume(0);
+                        minimap2.setVolume(0);
+                    } else {
+                        ws2.setVolume(vol);
+                        minimap2.setVolume(vol);
+                    }
+                }
+                
+                // Update status
+                const channelLetter = channel === 1 ? 'A' : 'B';
+                $('#status').text(`${channelLetter} ${channelMuted[channel] ? 'muted' : 'unmuted'}`);
+            }
+            
+            function loadAudioToChannel(url, channel) {
+                $('#status').text(`Loading Channel ${channel === 1 ? 'A' : 'B'}...`);
+                
+                // Clear region for this channel
+                removeRegionFromAllContainers(channel);
+                
+                // Load to appropriate wavesurfer
+                const ws = channel === 1 ? ws1 : ws2;
+                const minimap = channel === 1 ? minimap1 : minimap2;
+                
+                ws.load(url).then(function() {
+                    $('#status').text('Ready');
+                    fileNames[channel] = url.includes('blob:') ? fileNames[channel] : url.split('/').pop();
+                    
+                    // Load to corresponding minimap
+                    minimap.load(url);
+                    
+                    // Reset channel mute state when loading new audio
+                    channelMuted[channel] = false;
+                    $(`.channel-btn.mute[data-channel="${channel}"]`).removeClass('muted');
+                    
+                    // Reset volume for this channel
+                    if (channel === 1) {
+                        ws1.setVolume(vol);
+                        minimap1.setVolume(vol);
+                    } else {
+                        ws2.setVolume(vol);
+                        minimap2.setVolume(vol);
+                    }
+                    
+                }).catch(function(err) {
+                    $('#status').text('Error');
+                    alert('Error loading audio');
+                });
+            }
+            
+            // Initialize
+            updateVolumeIcon();
+            updateInfo();
+            selectChannel(1); // Start with channel A selected
+        });
+    </script>
+</body>
+</html>
